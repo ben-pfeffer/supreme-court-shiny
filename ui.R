@@ -3,7 +3,6 @@ library(ggplot2)
 library(shinydashboard)
 library(DT)
 library(plotly)
-library(shinycssloaders)
 
 #create list of all justices to select from
 justice.name.list <- c("HHBurton", "RHJackson", "WODouglas","FFrankfurter",
