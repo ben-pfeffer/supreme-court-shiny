@@ -336,7 +336,7 @@ shinyServer(function(input, output, session) {
     ggplotly(ggplot(data = dat) + 
       geom_smooth(aes(x = term, y = value, color = variable), size = .75) + 
       geom_point(aes(x = term, y = value, color = variable), size = .5) + 
-      labs(x = 'Year', y = 'Liberal Vote Percentage') )
+      labs(x = 'Year', y = 'Liberal Outcome Percentage') )
   })
   
   # code for all download buttons
