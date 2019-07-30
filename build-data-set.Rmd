@@ -1,0 +1,174 @@
+---
+title: "x"
+author: "Ben Pfeffer"
+date: "July 16, 2019"
+output: html_document
+---
+
+Hi!
+
+If you are visiting from the shiny app, note that there are some data sets that I originally played around with but did not end up using for the app. These data sets include information on Segal-Cover scores (an alternative to Martin Quinn scores based on newspaper writing before a justice is sworn in) and Judicial Common Space scores (a transformation of the MQ scores to mesh consistently with another congressional/presidential scoring system). The SC scores were not predictice enough to be of much use, and the JCS scores were too similar to MQ scores to make any difference in the modeling. 
+
+Rather than deleting the code, I just drop the variables I did not use in the app just before writing to CSV at the end of this file. That way it is still available if I decide to incorporate it into the app in the future.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+Load in data
+```{r, message=FALSE, warning=FALSE}
+load('scdata.rdata') # supreme court database dataset
+load('scScore.rdata') # stored in memory as 'measures'. used to add Segal-Cover scores
+MQscore <- read_csv('justicesMQ.csv') # Martin Quinn Scores
+JCSscore <- haven::read_dta('justicesJCS.dta') #Judicial Common Space Scores 
+```
+
+Drop unnexessary vars from Supreme court database, and merge scores from other data sets
+```{r}
+# this section merges Segal-Cover Scores
+measures <- measures %>% select(-mqScore, -justiceName) 
+
+# since scores don't (usually) change, we copy scores for years after data set ends in 2011
+measuresPost2011 <- measures %>% filter(term == 2011) %>%
+  add_row(justice = 115, scQual = 0.93, scIdeology = 0.11) %>% #add row for gorsuch. Data from wikipedia
+  add_row(justice = 116, scQual = 0.40, scIdeology = 0.07) %>% #add row for kavanaugh. Data from wikipedia
+  select(-term)
+
+# remove columns from Supreme Court Database file and merge in justice Segal-Cover scores
+df <- SCDB_2018_02_justiceCentered_Citation %>% # remove variables we don't need
+  select(caseId, term, chief, caseName, issueArea, lawType,majOpinWriter, 
+         majVotes, minVotes, justice,justiceName, vote, opinion, direction, majority) %>% 
+  left_join(measures, by = c('justice', 'term')) %>% 
+  left_join(measuresPost2011, by = 'justice') 
+
+# copy over values that are missing from one column. Then delete second column
+df$scQual.x <- ifelse(is.na(df$scQual.x),df$scQual.y, df$scQual.x)
+df$scIdeology.x <- ifelse(is.na(df$scIdeology.x), df$scIdeology.y, df$scIdeology.x)
+
+df <- df %>% select(-scQual.y, -scIdeology.y) %>% 
+  rename(scQual = scQual.x) %>% rename(scIdeology = scIdeology.x)
+
+# this section merges is Martin Quinn scores
+MQscore <- MQscore %>% select(justice, term, post_med)
+df <- left_join(df, MQscore, by = c('justice', 'term')) %>% rename(MQscore = post_med)
+
+# this section merges the JCS scores. We lack data for the 2017 term.
+JCSscore <-  gather(JCSscore, term, JCSscore, jcs1937:jcs2016, na.rm = TRUE) %>% 
+  mutate(term = as.numeric(substr(term, start = 4, stop = 7)))
+df <- left_join(df, JCSscore, by = c('justiceName', 'term'))
+
+df <- df %>% group_by(caseId) %>% mutate(MQrank = rank(MQscore)) %>% 
+  mutate(JCSrank = rank(JCSscore, na.last = 'keep')) %>%
+  mutate(SCrank = abs(rank(scIdeology, ties.method = 'random')-10))
+
+# rename the issueArea variable from numbers to what they represent
+df$issueArea <- plyr::mapvalues(df$issueArea, 
+                                from = 1:14, 
+                                to = c( 'Criminal Procedure', 'Civil Rights','First Amendment', 
+                                        'Due Process', 'Privacy', 'Attorneys', 'Unions', 
+                                        'Economic Activity', 'Judicial Power','Federalism',
+                                        'Interstate Relations','Federal Taxation', 'Miscellaneous',
+                                        'Private Action'))
+```
+
+
+Below we determine who was the swing vote justice in each case. Only cases decided by one vote are noted has having a swing justice. The swing justice is the most liberal member of a conservative majority, or the most conservative member of a liberal majority. 
+```{r}
+# if vote is 5-4 
+  # if justice voted in majority
+    # if liberal vote
+      # pick most conservative majority member
+    # if convervative vote
+      # pick most liberal member
+
+df <- df %>% group_by(caseId, majority) %>%
+  mutate(MQswing = ifelse(!is.na(MQscore),ifelse(majVotes - minVotes == 1, # if case decided by 1 vote
+                          ifelse(majority == 2, # if justice in majority
+                                 ifelse(direction == 1, # if court voted in conservative direction
+                                        ifelse(MQscore == min(MQscore), 1 , 0), 
+                                        # court voted conservative. choose the lowest MQscore from majority (most liberal justice)
+                                        
+                                        ifelse(MQscore == max(MQscore), 1 , 0)), 
+                                        # otherwise court voted liberal. choose highest MQ score (most conservative justice)
+                                 0),
+                             0), # otherwise not swing vote 
+                         NA)) # if score is NA, make swing vote NA
+
+df <- df %>% group_by(caseId, majority) %>%
+  mutate(JCSswing = ifelse(!is.na(JCSscore),ifelse(majVotes - minVotes == 1, # if case decided by 1 vote
+                          ifelse(majority == 2, # if justice in majority
+                                 ifelse(direction == 1, # if court voted in conservative direction
+                                        ifelse(JCSscore == min(JCSscore), 1 , 0), 
+                                        # court voted conservative. choose the lowest MQscore from majority (most liberal justice)
+                                        
+                                        ifelse(JCSscore == max(JCSscore), 1 , 0)), 
+                                        # otherwise court voted liberal. choose highest MQ score (most conservative justice)
+                                 0),
+                             0), # otherwise not swing vote 
+                         NA)) # if score is NA, make swing vote NA
+
+
+df <- df %>% group_by(caseId, majority) %>%
+  mutate(SCswing = ifelse(!is.na(scIdeology),
+                          ifelse(majVotes - minVotes == 1, # if case decided by 1 vote
+                            ifelse(majority == 2, # if justice in majority
+                                  ifelse(direction == 1, # if court voted in conservative direction
+                                          ifelse(scIdeology == max(scIdeology), 1 , 0), 
+                                           # court voted conservative. choose the highst score from majority (most liberal justice)
+                                        
+                                          ifelse(scIdeology == min(scIdeology), 1 , 0)), 
+                                          # otherwise court voted liberal. choose lowest score (most conservative justice)
+                                  
+                                 0), # otherwise not swing vote
+                            0),
+                          NA))
+df <- ungroup(df)
+```
+
+We also want to calculate the total number of times each justice cast a swing vote each year, as well as a percentage of cases in which they were the swing vote.
+```{r}
+# calculate the number of swing votes a justice cast for each year, 
+# as well as total cases for the year
+x <- df %>% group_by(justice, term) %>%
+  summarize(MQswing.total = sum(MQswing, na.rm = TRUE), 
+            JCSswing.total = sum(JCSswing, na.rm = TRUE),
+            SCswing.total = sum(SCswing, na.rm = TRUE),
+            case.load = n(), 
+            liberal.vote.total = sum(direction - 1, na.rm = TRUE),
+            majority.vote.total = sum(majority -1, na.rm = TRUE)) %>%
+  ungroup()
+
+# join this data into the data frame
+df <- left_join(df, x, by = c('justice', 'term'))
+
+# calculate percentages for year (justice, year)
+df <- df %>% mutate(MQswing.pct = MQswing.total / case.load,
+                    JCSswing.pct = JCSswing.total / case.load,
+                    SCswing.pct = SCswing.total / case.load,
+                    liberal.vote.pct = liberal.vote.total / case.load,
+                    majority.vote.pct = majority.vote.total / case.load)
+```
+
+Next, we want to build a second smaller dataset with only one line for each justice in each year. This will make work on some parts of the app easier, and allows us to drop case specific data. Our model will be built on the full dataset, but much of the exploratory analysis is more intuitive with the smaller dataset
+```{r}
+small.df <- df %>% 
+  select(term, justice, justiceName, issueArea, scQual:SCrank, MQswing.total:majority.vote.pct) %>% 
+  distinct(term, justice, justiceName, .keep_all = TRUE)
+
+#remove variables not used in shiny app before exporting to CSV
+small.df <- small.df %>% select(term, justiceName, MQscore, MQrank,
+                                MQswing.total, case.load, liberal.vote.total,
+                                liberal.vote.pct)
+df <- df %>% select(caseId, term, issueArea, majVotes, minVotes,
+                    justiceName, direction, majority, MQscore, MQrank, 
+                    MQswing, MQswing.total, case.load, liberal.vote.total,
+                    liberal.vote.pct)
+```
+
+Finally, we write the final dataset to a CSV
+```{r}
+write_csv(df, 'full_dataset.csv')
+write_csv(small.df, 'small_dataset.csv')
+```
+
