@@ -2,7 +2,6 @@ library(shiny)
 library(dplyr)
 library(ggplot2)
 library(plotly)
-library(shinycssloaders)
 
 # load justice by year dataset (simplified from big data set)
 justice.by.year <- readr::read_csv('small_dataset.csv') %>%
