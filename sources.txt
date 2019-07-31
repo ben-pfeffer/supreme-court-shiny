@@ -1,0 +1,8 @@
+scData.rdta - http://scdb.wustl.edu/data.php 
+measures.rdta - http://scdb.wustl.edu/data.php?s=5
+
+court.csv - https://mqscores.lsa.umich.edu/measures.php
+justices.csv - https://mqscores.lsa.umich.edu/measures.php
+
+justicesJCS.dta - http://epstein.wustl.edu/research/JCS.html 
+
