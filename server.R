@@ -56,6 +56,7 @@ calculateObservedVsPredicted <- function(just, df) {
   
   return(x)
 }
+
 # Models the probabilities the court as a whole votes in a liberal direction in a given year
 getPredictionsForYear <- function(year) {
   
@@ -91,6 +92,7 @@ getPredictionsForYear <- function(year) {
   
   return(predictions.for.year)
 }
+
 # Find the actual percentage of the time in a given year
 # that the court as a whole voted liberal for each issueArea
 calculateCourtPercentages <- function(year, df) {
@@ -107,6 +109,7 @@ calculateCourtPercentages <- function(year, df) {
     mutate(Observed.Liberal.Vote.Percentage = lib.majority / case.count) %>%
     select(-lib.majority) 
 }
+
 # Monte Carlo simulation of many court votes in a given year for all issue Areas
 runSimulatedVotes <- function(df, full.df) {
   issueAreas <- as.character(unique(df$issueArea))
@@ -186,7 +189,7 @@ shinyServer(function(input, output, session) {
         coord_cartesian(ylim = c(-8, 5)) + 
         geom_hline(yintercept = 0) + 
         labs(title = 'Martin Quinn Score of the Median Supreme Court Justice', 
-             x = 'Year', y = 'Martin Quinn Score')
+             x = 'Year', y = '← More Liberal / More Conservative →')
     } else {
       g <-  ggplot(data = clusterData,
                    aes(x = term, y = MQscore, group = justiceName)) + 
@@ -194,7 +197,7 @@ shinyServer(function(input, output, session) {
         geom_hline(yintercept = 0) + 
         theme(legend.position = 'none') + 
         labs(title = 'Martin Quinn Scores of All Supreme Court Justices', 
-             x = 'Year', y = 'Martin Quinn Score')
+             x = 'Year', y = '← More Liberal / More Conservative →')
       
       if(input$clustering) {
         g <- g + geom_line(aes(color = cluster, 
@@ -219,7 +222,7 @@ shinyServer(function(input, output, session) {
   # build plot for the logistic regression graph
   output$LR.graph <- renderPlot({
     g <- ggplot(data = df, aes(x = MQscore, y = direction)) +
-      labs(x = 'Martin Quinn Score', y = 'Percent of Time Voting Liberal') +
+      labs(x = '← More Liberal / More Conservative →', y = 'Liberal Vote Probability') +
       geom_jitter(alpha = 0.03)
     
     if(input$areas) {
@@ -244,10 +247,12 @@ shinyServer(function(input, output, session) {
     x
       
   })
+  
   # build data table for justice observed and model predicted liberal vote probabilities
   output$justice.table <- renderDT(
     run.observed.v.predicted()
   )
+  
   # build plot for justice observed and model predicted liberal vote probabilities
   build.justice.graph <- reactive({
     observed.v.predicted <- run.observed.v.predicted()
@@ -261,8 +266,10 @@ shinyServer(function(input, output, session) {
                                         'Model Prediction')),
            aes(x = variable, y = value, fill = variable, width = .8)) +
       geom_bar(stat = 'identity', position = 'dodge') + 
-      facet_wrap(~issueArea) + coord_flip() +
-      theme(legend.position = 'none') + 
+      facet_wrap(~issueArea) + 
+      expand_limits(y=c(0,1)) +
+      coord_flip() +
+      theme(legend.position = 'none') +
       labs(title = paste0('Liberal Vote Percentages for ', input$just.name),
            x = '', y = '')
   })
@@ -277,9 +284,9 @@ shinyServer(function(input, output, session) {
     x <- predict(LR.fit, newdata = data.frame(MQscore = input$MQslider,
                                          issueArea = input$MQissueArea),
             se.fit = FALSE, type = 'response')
-    paste0('This imaginary justice with a Martin Quinn score of ', 
-           input$MQslider, ' is predicted to cast a liberal vote in ', 
-           round(x*100 , 2), '% of ', input$MQissueArea, ' cases.')
+    paste0("This imaginary justice with a Martin Quinn score of ", 
+           input$MQslider, " is predicted to cast a liberal vote in ", 
+           round(x*100 , 2), '% of ', input$MQissueArea, " cases.")
   })
   output$custom.prediction <- renderText({
     get.custom.prediction()
@@ -298,6 +305,7 @@ shinyServer(function(input, output, session) {
     datatable(data = getYearData(),
               options = list(scrollX = TRUE))
   )
+  
   # plot specific years predictions in faceted grid
   build.year.graph <- reactive({
     specific.year.predictions <- getYearData() 
@@ -312,7 +320,9 @@ shinyServer(function(input, output, session) {
                                        'Actual Outcomes')),
            aes(x = variable, y = value, fill = variable, width = .8)) +
       geom_bar(stat = 'identity', position = 'dodge') + 
-      facet_wrap(~issueArea) + coord_flip() +
+      facet_wrap(~issueArea) + 
+      expand_limits(y=c(0,1)) +
+      coord_flip() +
       theme(legend.position = 'none') + 
       labs(title = paste0('Predicted and Actual Liberal Outcome Percentages for ', 
                           specific.year.predictions$term[1]), 
@@ -329,6 +339,7 @@ shinyServer(function(input, output, session) {
       reshape2::melt(id.vars = 'term')
     
   })
+  
   # build plot for trend over whole data set range
   output$trend.lines <- renderPlotly({
     dat <- getTrend()
@@ -370,7 +381,4 @@ shinyServer(function(input, output, session) {
     }
   )
 })
-
-
-
        
