@@ -18,8 +18,8 @@ library(tidyverse)
 
 Load in data
 ```{r, message=FALSE, warning=FALSE}
-load('scdata.rdata') # supreme court database dataset
-load('scScore.rdata') # stored in memory as 'measures'. used to add Segal-Cover scores
+load('scData.Rdata') # supreme court database dataset
+load('scScore.Rdata') # stored in memory as 'measures'. used to add Segal-Cover scores
 MQscore <- read_csv('justicesMQ.csv') # Martin Quinn Scores
 JCSscore <- haven::read_dta('justicesJCS.dta') #Judicial Common Space Scores 
 ```
